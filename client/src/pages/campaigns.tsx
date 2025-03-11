@@ -7,13 +7,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -166,7 +160,7 @@ export default function Campaigns() {
           const campaign = campaigns.find(
             (c) => c.newsletterId === newsletter._id
           );
-          const isSending = campaign?.status === "processing";
+          const isSending = campaign?.status === "sending";
           const isSuccess = campaign?.status === "completed";
           const isFailed = campaign?.status === "failed";
 
@@ -225,12 +219,13 @@ export default function Campaigns() {
                     <div className="text-sm text-muted-foreground">
                       Opens: {campaign.opens}
                     </div>
-                    {campaign.emailsSent && campaign.totalEmails && (
-                      <div className="text-sm text-muted-foreground">
-                        Progress: {campaign.emailsSent} / {campaign.totalEmails}{" "}
-                        emails sent
-                      </div>
-                    )}
+                    {campaign.emailsSent !== undefined &&
+                      campaign.totalEmails && (
+                        <div className="text-sm text-muted-foreground">
+                          Progress: {campaign.emailsSent} /{" "}
+                          {campaign.totalEmails} emails sent
+                        </div>
+                      )}
                   </div>
                 )}
               </CardContent>

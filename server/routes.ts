@@ -81,33 +81,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendStatus(200);
   });
 
+  // Subscriber bulk import route
   app.post("/api/subscribers/bulk", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
     try {
-      // Validate each subscriber in the array
       const subscribers = req.body;
-      const results = await Promise.all(
-        subscribers.map(async (data) => {
-          try {
-            const validData = insertSubscriberSchema.parse(data);
-            return await storage.createSubscriber(validData);
-          } catch (error) {
-            return { error: String(error), data };
-          }
-        })
+      console.log(
+        `Processing bulk import of ${subscribers.length} subscribers`
       );
 
-      const successful = results.filter((r) => !r.error);
-      const failed = results.filter((r) => r.error);
+      // Basic validation
+      if (!Array.isArray(subscribers)) {
+        return res
+          .status(400)
+          .json({ error: "Expected an array of subscribers" });
+      }
 
-      res.status(201).json({
-        message: `Successfully imported ${successful.length} subscribers. ${failed.length} failed.`,
-        successful,
-        failed,
+      if (subscribers.length > 10000) {
+        return res.status(400).json({
+          error: "Maximum 10,000 subscribers can be imported at once",
+        });
+      }
+
+      // Prepare bulk operation
+      const bulk = Subscriber.collection.initializeUnorderedBulkOp();
+
+      // Add each subscriber to bulk operation
+      subscribers.forEach((sub) => {
+        bulk.insert({
+          email: sub.email,
+          name: sub.name || "",
+          subscribed: true,
+          createdAt: new Date(),
+        });
       });
+
+      try {
+        const result = await bulk.execute();
+        console.log("Bulk operation completed:", result);
+
+        res.json({
+          message: `Successfully imported ${result.nInserted} subscribers`,
+          successful: result.nInserted,
+          failed: subscribers.length - result.nInserted,
+        });
+      } catch (bulkError) {
+        console.error("Bulk write error:", bulkError);
+
+        // Handle duplicate key errors
+        if (bulkError.writeErrors) {
+          const duplicates = bulkError.writeErrors.filter(
+            (e) => e.code === 11000
+          ).length;
+          const inserted = bulkError.result?.nInserted || 0;
+
+          res.json({
+            message: `Imported ${inserted} subscribers. ${duplicates} duplicates skipped.`,
+            successful: inserted,
+            failed: duplicates,
+          });
+        } else {
+          throw bulkError;
+        }
+      }
     } catch (error) {
-      res.status(400).json({ error: String(error) });
+      console.error("Import error:", error);
+      res.status(500).json({
+        error: "Failed to process import",
+        details: String(error),
+      });
     }
   });
 
@@ -126,14 +169,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `Found ${subscribers.length} active subscribers for newsletter`
       );
 
-      // Create campaign
+      // Create campaign with initial status
       const campaign = await Campaign.create({
         newsletterId,
         opens: 0,
         clicks: 0,
-        status: "processing",
+        status: "sending",
         emailsSent: 0,
         totalEmails: subscribers.length,
+        sentAt: new Date(),
       });
 
       console.log(
@@ -151,13 +195,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send emails in the background
       emailService
         .sendBulkEmails(campaign._id.toString(), emailBatch)
-        .catch((error) => console.error("Bulk email sending error:", error));
+        .then(async () => {
+          // Update campaign status to completed
+          await Campaign.findByIdAndUpdate(campaign._id, {
+            status: "completed",
+            emailsSent: subscribers.length,
+          });
+        })
+        .catch(async (error) => {
+          console.error("Bulk email sending error:", error);
+          // Update campaign status to failed
+          await Campaign.findByIdAndUpdate(campaign._id, {
+            status: "failed",
+            error: String(error),
+          });
+        });
 
       res.json({
         message: "Campaign started successfully",
         campaign: campaign._id,
         totalEmails: subscribers.length,
-        status: "processing",
+        status: "sending",
       });
     } catch (error) {
       console.error("Newsletter sending error:", error);

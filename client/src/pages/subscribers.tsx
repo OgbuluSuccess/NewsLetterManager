@@ -10,6 +10,8 @@ import {
   UserPlus,
   Download,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import {
   Select,
@@ -32,6 +35,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Subscribers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const {
     data: subscribers,
@@ -61,6 +68,16 @@ export default function Subscribers() {
       return matchesSearch && matchesFilter;
     });
   }, [subscribers, searchQuery, filterStatus]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredSubscribers.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredSubscribers.slice(indexOfFirstItem, indexOfLastItem);
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
 
   // Count statistics
   const totalSubscribers = subscribers?.length || 0;
@@ -177,7 +194,7 @@ export default function Subscribers() {
             <CardDescription>
               {isLoading
                 ? "Loading subscribers..."
-                : `Showing ${filteredSubscribers.length} of ${totalSubscribers} subscribers`}
+                : `Showing ${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredSubscribers.length)} of ${filteredSubscribers.length} subscribers`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -215,9 +232,127 @@ export default function Subscribers() {
                 </p>
               </div>
             ) : (
-              <SubscriberList subscribers={filteredSubscribers} />
+              <SubscriberList subscribers={currentItems} />
             )}
           </CardContent>
+          
+          {/* Pagination controls */}
+          {!isLoading && !isError && filteredSubscribers.length > 0 && (
+            <CardFooter className="flex items-center justify-between border-t px-6 py-4">
+              <div className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </div>
+              <div className="flex items-center space-x-2">
+                <Select 
+                  value={itemsPerPage.toString()} 
+                  onValueChange={(value) => {
+                    setItemsPerPage(Number(value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue placeholder="Per page" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 per page</SelectItem>
+                    <SelectItem value="10">10 per page</SelectItem>
+                    <SelectItem value="20">20 per page</SelectItem>
+                    <SelectItem value="50">50 per page</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <div className="flex items-center space-x-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  {totalPages <= 5 ? (
+                    <>
+                      {Array.from({ length: totalPages }, (_, i) => (
+                        <Button
+                          key={i + 1}
+                          variant={currentPage === i + 1 ? "default" : "outline"}
+                          size="icon"
+                          onClick={() => handlePageChange(i + 1)}
+                        >
+                          {i + 1}
+                        </Button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {currentPage > 2 && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handlePageChange(1)}
+                        >
+                          1
+                        </Button>
+                      )}
+                      
+                      {currentPage > 3 && (
+                        <span className="px-2 text-muted-foreground">...</span>
+                      )}
+                      
+                      {currentPage > 1 && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handlePageChange(currentPage - 1)}
+                        >
+                          {currentPage - 1}
+                        </Button>
+                      )}
+                      
+                      <Button
+                        variant="default"
+                        size="icon"
+                      >
+                        {currentPage}
+                      </Button>
+                      
+                      {currentPage < totalPages && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handlePageChange(currentPage + 1)}
+                        >
+                          {currentPage + 1}
+                        </Button>
+                      )}
+                      
+                      {currentPage < totalPages - 2 && (
+                        <span className="px-2 text-muted-foreground">...</span>
+                      )}
+                      
+                      {currentPage < totalPages - 1 && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handlePageChange(totalPages)}
+                        >
+                          {totalPages}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardFooter>
+          )}
         </Card>
       </div>
     </DashboardLayout>
